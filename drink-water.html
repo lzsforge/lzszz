@@ -1,11 +1,41 @@
-<script>
-  window.onload = function() {
-    // 尝试调用支付宝
-    window.location.href = "alipays://platformapi/startapp?appId=20000067&url=http://wr.leadfair.xin/api/wn/u/in.php?rtuid=0186012308161494";
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>支付宝跳转</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin-top: 20%;
+    }
+    button {
+      padding: 12px 24px;
+      font-size: 18px;
+      background-color: #1677ff;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #0d5dcc;
+    }
+  </style>
+  <script>
+    function openAlipay() {
+      var url = "alipays://platformapi/startapp?appId=20000067&url=http://wr.leadfair.xin/api/wn/u/in.php?rtuid=0186012308161494";
+      window.location.href = url;
+    }
 
-    // 如果失败，再跳转到普通链接
-    setTimeout(function(){
-      window.location.href = "http://wr.leadfair.xin/api/wn/u/in.php?rtuid=0186012308161494";
-    }, 1500);
-  };
-</script>
+    // 页面加载时自动跳转
+    window.onload = function() {
+      openAlipay();
+    };
+  </script>
+</head>
+<body>
+  <h2>正在尝试打开支付宝...</h2>
+  <button onclick="openAlipay()">支付宝喝水</button>
+</body>
+</html>
