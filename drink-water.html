@@ -1,0 +1,11 @@
+<script>
+  window.onload = function() {
+    // 尝试调用支付宝
+    window.location.href = "alipays://platformapi/startapp?appId=20000067&url=http://wr.leadfair.xin/api/wn/u/in.php?rtuid=0186012308161494";
+
+    // 如果失败，再跳转到普通链接
+    setTimeout(function(){
+      window.location.href = "http://wr.leadfair.xin/api/wn/u/in.php?rtuid=0186012308161494";
+    }, 1500);
+  };
+</script>
