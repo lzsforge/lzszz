@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>PDF 复制内容格式化工具</title>
+  <style>
+    /* 基础样式：简洁、现代、易读 */
+    :root{
+      --bg: #f6f8fb;
+      --card: #ffffff;
+      --muted: #6b7280;
+      --accent: #2563eb;
+      --accent-600: #1e40af;
+      --success: #16a34a;
+      --danger: #ef4444;
+      --radius: 12px;
+      --glass: rgba(255,255,255,0.6);
+      font-family: "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC", "Noto Sans SC", Arial, sans-serif;
+    }
+
+    html,body{
+      height:100%;
+      margin:0;
+      background: linear-gradient(180deg, #eef2ff 0%, var(--bg) 100%);
+      color:#0f172a;
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+      line-height:1.45;
+    }
+
+    .container{
+      max-width:1200px;
+      margin:28px auto;
+      padding:20px;
+      box-sizing:border-box;
+    }
+
+    header {
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:16px;
+      margin-bottom:18px;
+    }
+
+    h1{
+      font-size:20px;
+      margin:0;
+      letter-spacing:0.2px;
+    }
+
+    .sub{
+      color:var(--muted);
+      font-size:13px;
+    }
+
+    /* 主体卡片 */
+    .card{
+      background:var(--card);
+      border-radius:var(--radius);
+      box-shadow: 0 6px 18px rgba(16,24,40,0.06);
+      padding:18px;
+    }
+
+    /* 文本区布局：大屏左右并排，小屏垂直堆叠 */
+    .io-grid{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:14px;
+      align-items:stretch;
+    }
+
+    @media (max-width:880px){
+      .io-grid{
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .panel {
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      min-height:360px;
+    }
+
+    label.panel-title{
+      font-weight:600;
+      font-size:13px;
+      color:#0b1220;
+    }
+
+    textarea{
+      width:100%;
+      resize:vertical;
+      min-height:260px;
+      max-height:65vh;
+      padding:12px;
+      border-radius:10px;
+      border:1px solid #e6e9ef;
+      background: linear-gradient(180deg, #ffffff, #fbfdff);
+      box-sizing:border-box;
+      font-size:14px;
+      line-height:1.6;
+      outline:none;
+      transition:box-shadow .12s, border-color .12s;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Noto Sans SC", Helvetica, Arial;
+    }
+
+    textarea:focus{
+      border-color: var(--accent);
+      box-shadow: 0 6px 20px rgba(37,99,235,0.08);
+    }
+
+    textarea[readonly]{
+      background: linear-gradient(180deg, #fbfdff, #f8fafc);
+      color:#0b1220;
+    }
+
+    /* 选项区域 */
+    .options {
+      display:flex;
+      flex-wrap:wrap;
+      gap:12px 18px;
+      padding:12px 4px;
+      margin-top:14px;
+      border-top:1px dashed #eef2ff;
+    }
+
+    .opt {
+      display:flex;
+      gap:8px;
+      align-items:center;
+      font-size:13px;
+      color:var(--muted);
+    }
+
+    .opt input[type="checkbox"]{
+      width:18px;
+      height:18px;
+      accent-color: var(--accent);
+    }
+
+    /* 按钮区域 */
+    .actions{
+      display:flex;
+      gap:12px;
+      margin-top:16px;
+      flex-wrap:wrap;
+    }
+
+    button{
+      padding:10px 14px;
+      border-radius:10px;
+      border: none;
+      cursor:pointer;
+      font-weight:600;
+      font-size:14px;
+    }
+
+    #format-btn{
+      background: linear-gradient(180deg,var(--accent),var(--accent-600));
+      color:#fff;
+      box-shadow: 0 8px 18px rgba(37,99,235,0.12);
+    }
+
+    #copy-btn{
+      background: var(--glass);
+      color:var(--accent-600);
+      border:1px solid rgba(30,64,175,0.06);
+    }
+
+    #clear-btn{
+      background:transparent;
+      border:1px solid #f3f4f6;
+      color:var(--danger);
+    }
+
+    /* 小提示（Toast） */
+    .toast{
+      position:fixed;
+      right:22px;
+      bottom:22px;
+      background: #111827;
+      color:#fff;
+      padding:10px 14px;
+      border-radius:10px;
+      box-shadow: 0 10px 30px rgba(2,6,23,0.35);
+      opacity:0;
+      transform: translateY(12px);
+      transition:opacity .18s, transform .18s;
+      z-index:2000;
+      font-size:13px;
+    }
+
+    .toast.show{
+      opacity:1;
+      transform: translateY(0);
+    }
+
+    /* footer / 说明 */
+    .note{
+      margin-top:12px;
+      color:var(--muted);
+      font-size:13px;
+    }
+
+    /* 小屏按钮全宽 */
+    @media (max-width:520px){
+      .actions{
+        flex-direction:column;
+      }
+      button{ width:100%; }
+    }
+
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>PDF 复制内容格式化工具</h1>
+        <div class="sub">快速清理和格式化从 PDF 复制出来常见的换行、空格与标点问题</div>
+      </div>
+      <div class="sub">单文件 · 原生 HTML/CSS/JS</div>
+    </header>
+
+    <div class="card" role="main" aria-label="PDF 格式化工具主区域">
+      <div class="io-grid" style="align-items:stretch;">
+        <!-- 左侧输入 -->
+        <div class="panel">
+          <label for="input-text" class="panel-title">输入（从 PDF 复制粘贴到这里）</label>
+          <textarea id="input-text" placeholder="请在此处粘贴从 PDF 复制的文本"></textarea>
+        </div>
+
+        <!-- 右侧输出 -->
+        <div class="panel">
+          <label for="output-text" class="panel-title">输出（格式化后结果）</label>
+          <textarea id="output-text" readonly placeholder="格式化后的内容将显示在此处"></textarea>
+        </div>
+      </div>
+
+      <!-- 功能选项 -->
+      <div class="options" id="options-area" aria-label="格式化功能选项">
+        <label class="opt"><input type="checkbox" id="cb-remove-all-spaces"> 去除所有空格（半角 & 全角）</label>
+        <label class="opt"><input type="checkbox" id="cb-collapse-newlines"> 去除多余换行（连续多个换行 -> 单个）</label>
+        <label class="opt"><input type="checkbox" id="cb-merge-linebreaks"> 合并断行（将末尾非句末的行与下一行合并）</label>
+        <label class="opt"><input type="checkbox" id="cb-comma-to-zh"> 英文逗号转中文（, → ，）</label>
+        <label class="opt"><input type="checkbox" id="cb-period-to-zh"> 英文句号转中文（. → 。）</label>
+        <label class="opt"><input type="checkbox" id="cb-paren-to-zh"> 英文括号转中文括号（( ) → （ ））</label>
+        <label class="opt"><input type="checkbox" id="cb-fix-cn-spaces"> 修正中文间空格（移除汉字之间多余空格）</label>
+      </div>
+
+      <!-- 操作按钮 -->
+      <div class="actions">
+        <button id="format-btn" title="根据选中的功能对输入进行逐项格式化">一键格式化</button>
+        <button id="copy-btn" title="复制右侧输出到剪贴板">复制结果</button>
+        <button id="clear-btn" title="清空输入与输出">清空内容</button>
+      </div>
+
+      <div class="note">
+        提示：先粘贴文本 → 选择需要的处理项 → 点击“<strong>一键格式化</strong>”。如果遇到特殊情况（如数字小数点被错误替换），可取消对应复选项再处理。
+      </div>
+    </div>
+  </div>
+
+  <!-- 轻量 Toast 提示 -->
+  <div id="toast" class="toast" role="status" aria-live="polite">已复制！</div>
+
+<script>
+  /*************************************************************************
+   * PDF 复制内容格式化工具 - 脚本部分
+   *************************************************************************/
+
+  const inputEl = document.getElementById('input-text');
+  const outputEl = document.getElementById('output-text');
+  const formatBtn = document.getElementById('format-btn');
+  const copyBtn = document.getElementById('copy-btn');
+  const clearBtn = document.getElementById('clear-btn');
+  const toastEl = document.getElementById('toast');
+
+  // 所有复选框
+  const checkboxes = [
+    "cb-remove-all-spaces",
+    "cb-collapse-newlines",
+    "cb-merge-linebreaks",
+    "cb-comma-to-zh",
+    "cb-period-to-zh",
+    "cb-paren-to-zh",
+    "cb-fix-cn-spaces"
+  ].map(id => document.getElementById(id));
+
+  /********************** 本地存储逻辑 **********************/
+  const STORAGE_KEY = "pdf-format-tool-options";
+
+  // 从 localStorage 恢复状态
+  function loadCheckboxStates() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+      if (saved && typeof saved === "object") {
+        checkboxes.forEach(cb => {
+          if (saved[cb.id] !== undefined) {
+            cb.checked = saved[cb.id];
+          }
+        });
+      }
+    } catch (err) {
+      console.warn("加载勾选状态失败:", err);
+    }
+  }
+
+  // 保存当前勾选状态
+  function saveCheckboxStates() {
+    const data = {};
+    checkboxes.forEach(cb => data[cb.id] = cb.checked);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  }
+
+  // 初始化时恢复勾选状态
+  loadCheckboxStates();
+
+  // 每次勾选变化时保存
+  checkboxes.forEach(cb => cb.addEventListener("change", saveCheckboxStates));
+
+  /********************** Toast 提示 **********************/
+  function showToast(text = '已完成', ms = 1600) {
+    toastEl.textContent = text;
+    toastEl.classList.add('show');
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(()=> toastEl.classList.remove('show'), ms);
+  }
+
+  /********************** 各单项处理函数 **********************/
+  function removeAllSpaces(text) {
+    return text.replace(/[\u00A0\u3000 \t\v\f]+/g, '');
+  }
+  function collapseNewlines(text) {
+    return text.replace(/\r\n/g, '\n').replace(/\n{2,}/g, '\n');
+  }
+  function mergeLineBreaks(text) {
+    text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    const lines = text.split('\n');
+    const out = [];
+    const sentenceEndRegex = /[。？！…]|[!?\.;:]/u;
+
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i];
+      const rtrimmed = line.replace(/\s+$/u, '');
+      const lastChar = rtrimmed.slice(-1);
+
+      if (i === lines.length - 1) {
+        out.push(line);
+        break;
+      }
+      if (rtrimmed === '' || sentenceEndRegex.test(lastChar)) {
+        out.push(line);
+      } else {
+        let next = lines[i + 1];
+        if (/[—-]\s*$/.test(line)) {
+          line = line.replace(/([—-])\s*$/u, '');
+          out.push(line + next.replace(/^\s+/, ''));
+          i++;
+          continue;
+        }
+        const leftChar = rtrimmed.slice(-1);
+        const rightChar = next.replace(/^\s+/u, '').charAt(0);
+        const isLeftHan = /\p{Script=Han}/u.test(leftChar);
+        const isRightHan = /\p{Script=Han}/u.test(rightChar);
+        const spacer = (isLeftHan && isRightHan) ? '' : ' ';
+        const merged = rtrimmed + spacer + next.replace(/^\s+/u, '');
+        out.push(merged);
+        i++;
+      }
+    }
+    return out.join('\n');
+  }
+  function commaToChinese(text) { return text.replace(/,/g, '，'); }
+  function periodToChinese(text) {
+    text = text.replace(/\.{6,}/g, '……').replace(/\.{3,5}/g, '…');
+    return text.replace(/(?<!\d)\.(?!\d)/g, '。');
+  }
+  function parenToChinese(text) { return text.replace(/\(/g, '（').replace(/\)/g, '）'); }
+  function fixChineseInnerSpaces(text) {
+    let prev;
+    do {
+      prev = text;
+      text = text.replace(/(\p{Script=Han})\s+(\p{Script=Han})/gu, '$1$2');
+    } while (text !== prev);
+    return text;
+  }
+
+  /********************** 主处理函数 **********************/
+  function formatText() {
+    let text = inputEl.value ?? '';
+    if (!text) {
+      outputEl.value = '';
+      showToast('输入为空');
+      return;
+    }
+    if (document.getElementById('cb-remove-all-spaces').checked) text = removeAllSpaces(text);
+    if (document.getElementById('cb-merge-linebreaks').checked) text = mergeLineBreaks(text);
+    if (document.getElementById('cb-collapse-newlines').checked) text = collapseNewlines(text);
+    if (document.getElementById('cb-comma-to-zh').checked) text = commaToChinese(text);
+    if (document.getElementById('cb-period-to-zh').checked) text = periodToChinese(text);
+    if (document.getElementById('cb-paren-to-zh').checked) text = parenToChinese(text);
+    if (document.getElementById('cb-fix-cn-spaces').checked) text = fixChineseInnerSpaces(text);
+    outputEl.value = text;
+    showToast('格式化完成');
+  }
+
+  /********************** 事件绑定 **********************/
+  formatBtn.addEventListener('click', formatText);
+  copyBtn.addEventListener('click', async () => {
+    const txt = outputEl.value ?? '';
+    if (!txt) { showToast('没有可复制的内容'); return; }
+    try {
+      await navigator.clipboard.writeText(txt);
+      showToast('已复制！');
+    } catch {
+      outputEl.select();
+      document.execCommand('copy');
+      showToast('已复制！');
+    }
+  });
+  clearBtn.addEventListener('click', () => {
+    inputEl.value = '';
+    outputEl.value = '';
+    showToast('已清空');
+  });
+  inputEl.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') formatText();
+  });
+</script>
+</body>
+</html>
