@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>俄罗斯钓鱼4 — 游戏时间闹钟</title>
+  <style>
+    :root{--bg:#0f1724;--card:#0b1220;--accent:#07b;--muted:#9aa5b1;--glass:rgba(255,255,255,0.04)}
+    html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;color:#e6eef6;background:linear-gradient(180deg,#06121b 0%, #071826 100%);}
+    .wrap{max-width:920px;margin:32px auto;padding:24px;border-radius:12px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));box-shadow:0 6px 30px rgba(2,6,23,0.6);}
+    h1{margin:0 0 8px;font-weight:600;font-size:20px}
+    p.lead{margin:0 0 18px;color:var(--muted)}
+    .row{display:flex;gap:16px;align-items:center}
+    .card{background:var(--card);padding:16px;border-radius:10px;flex:1;min-width:0}
+    .big{font-size:40px;font-weight:700;letter-spacing:0.02em}
+    .sub{color:var(--muted);font-size:13px}
+    .controls{display:flex;gap:8px;margin-top:12px}
+    input[type=time], input[type=text]{padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:var(--glass);color:inherit}
+    button{background:var(--accent);border:none;color:white;padding:8px 12px;border-radius:8px;cursor:pointer}
+    button.ghost{background:transparent;border:1px solid rgba(255,255,255,0.04)}
+    ul.alarms{list-style:none;padding:0;margin:12px 0}
+    li.alarm{display:flex;justify-content:space-between;padding:8px;border-radius:8px;background:linear-gradient(90deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005));margin-bottom:8px}
+    .progress{height:10px;background:rgba(255,255,255,0.03);border-radius:999px;overflow:hidden}
+    .progress > i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),#6ef);width:0%}
+    .muted{color:var(--muted)}
+    footer{margin-top:16px;color:var(--muted);font-size:13px}
+    .toggle{display:inline-flex;gap:8px;align-items:center}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>俄罗斯钓鱼4 — 游戏时间闹钟</h1>
+    <p class="lead">规则：现实时间 1 小时 = 游戏时间 24 小时；每个整点（例如 10:00:00）对应游戏 00:00:00（午夜）。设置游戏时间闹钟，达到后会提醒。</p>
+
+    <div class="row">
+      <div class="card" style="flex:0 0 320px">
+        <div class="sub">现实时间</div>
+        <div id="realTime" class="big">--:--:--</div>
+        <div class="sub">游戏时间（24 倍速，每小时循环）</div>
+        <div id="gameTime" class="big">--:--:--</div>
+        <div class="progress" title="游戏日进度" style="margin-top:10px">
+          <i id="dayProgress"></i>
+        </div>
+        <div class="controls">
+          <label class="muted">蜂鸣</label>
+          <label class="toggle"><input id="beepToggle" type="checkbox" checked> 开</label>
+          <button id="addBtn">添加闹钟</button>
+          <button id="clearBtn" class="ghost">清空</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="sub">添加游戏时间闹钟（不显示日期，只按游戏时分匹配）</div>
+        <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+          <input id="alarmTime" type="time" step="1" value="06:00">
+          <input id="label" type="text" placeholder="提示文字（可选）">
+          <button id="saveAlarm">保存</button>
+        </div>
+        <ul id="alarms" class="alarms"></ul>
+        <div class="sub muted">闹钟会保存在本地（localStorage）。当游戏时间到达设定时间时，会弹窗并播放提示音（若允许）。</div>
+      </div>
+    </div>
+
+    <footer>说明：每个整点（例如 14:00:00）对应游戏 00:00:00；游戏时间基于当前实时时钟，随系统时间变化立即生效。</footer>
+  </div>
+
+  <script>
+    // 映射说明：用当前时间在小时内的秒数 / 3600 -> 比例 p；游戏秒 = p * 86400
+    const realTimeEl = document.getElementById('realTime');
+    const gameTimeEl = document.getElementById('gameTime');
+    const progressEl = document.getElementById('dayProgress');
+    const alarmsListEl = document.getElementById('alarms');
+    const alarmTimeInput = document.getElementById('alarmTime');
+    const labelInput = document.getElementById('label');
+    const saveAlarmBtn = document.getElementById('saveAlarm');
+    const addBtn = document.getElementById('addBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const beepToggle = document.getElementById('beepToggle');
+
+    let alarms = JSON.parse(localStorage.getItem('rf4_alarms') || '[]');
+    let lastGameSec = null;
+
+    function pad(n, l=2){return String(n).padStart(l,'0')}
+
+    function nowGameSeconds(date){
+      // seconds since start of current real-hour
+      const s = date.getMinutes()*60 + date.getSeconds() + date.getMilliseconds()/1000;
+      const proportion = s / 3600; // 0..1
+      const gameSeconds = proportion * 86400; // 0..86400
+      return gameSeconds;
+    }
+
+    function secToHMS(secs){
+      secs = (Math.floor(secs) + 86400) % 86400;
+      const h = Math.floor(secs/3600); secs%=3600;
+      const m = Math.floor(secs/60); const s = Math.floor(secs%60);
+      return {h,m,s};
+    }
+
+    function formatHMS(obj){return pad(obj.h)+':'+pad(obj.m)+':'+pad(obj.s)}
+
+    function renderAlarms(){
+      alarmsListEl.innerHTML='';
+      alarms.forEach((a, idx)=>{
+        const li = document.createElement('li'); li.className='alarm';
+        li.innerHTML = `<div><strong>${a.time}</strong> <span class="muted">${a.label||''}</span></div>
+                        <div style="display:flex;gap:8px"><button data-idx="${idx}" class="btnToggle">${a.enabled? '关闭':'开启'}</button><button data-idx="${idx}" class="btnDel">删除</button></div>`;
+        alarmsListEl.appendChild(li);
+      });
+    }
+
+    function saveAlarms(){ localStorage.setItem('rf4_alarms', JSON.stringify(alarms)); renderAlarms(); }
+
+    function gameSecFromHHMM(timeStr){
+      // timeStr 格式 HH:MM 或 HH:MM:SS
+      const parts = timeStr.split(':').map(x=>Number(x));
+      const h = parts[0]||0, m = parts[1]||0, s = parts[2]||0;
+      return ((h*3600)+(m*60)+s) % 86400;
+    }
+
+    // UI events
+    saveAlarmBtn.addEventListener('click', ()=>{
+      const t = alarmTimeInput.value; if(!t){alert('请选择时间');return}
+      const label = labelInput.value.trim();
+      alarms.push({time:t,label:label,enabled:true}); saveAlarms();
+      labelInput.value='';
+    });
+
+    addBtn.addEventListener('click', ()=>{ alarmTimeInput.focus(); })
+    clearBtn.addEventListener('click', ()=>{ if(confirm('清空所有闹钟？')){alarms=[]; saveAlarms();}})
+
+    alarmsListEl.addEventListener('click', (e)=>{
+      const btn = e.target.closest('button'); if(!btn) return;
+      const idx = Number(btn.getAttribute('data-idx'));
+      if(btn.classList.contains('btnDel')){ alarms.splice(idx,1); saveAlarms(); }
+      else if(btn.classList.contains('btnToggle')){ alarms[idx].enabled = !alarms[idx].enabled; saveAlarms(); }
+    });
+
+    // 简易蜂鸣器（WebAudio）
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    let audioCtx = null;
+    function beep(){
+      if(!beepToggle.checked) return;
+      if(!AudioCtx) { alert('此浏览器不支持 WebAudio，无法播放提示音'); return; }
+      if(!audioCtx) audioCtx = new AudioCtx();
+      const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
+      o.type='sine'; o.frequency.value = 880; g.gain.value=0.0001;
+      o.connect(g); g.connect(audioCtx.destination);
+      const now = audioCtx.currentTime;
+      g.gain.linearRampToValueAtTime(0.2, now+0.01);
+      o.start(now);
+      g.gain.exponentialRampToValueAtTime(0.00001, now+1.0);
+      o.stop(now+1.05);
+    }
+
+    // 主循环
+    function tick(){
+      const d = new Date();
+      realTimeEl.textContent = pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
+      const gs = nowGameSeconds(d);
+      const hms = secToHMS(gs);
+      gameTimeEl.textContent = formatHMS(hms);
+      progressEl.style.width = (gs/86400*100)+'%';
+
+      // 检查闹钟
+      alarms.forEach(a=>{
+        if(!a.enabled) return;
+        const target = gameSecFromHHMM(a.time);
+        // 当从上一次跨过 target，则触发。考虑循环边界。
+        if(lastGameSec==null) return;
+        const prev = lastGameSec; const cur = gs;
+        // 处理可能的跨越情况
+        function passed(prevSec, curSec, targetSec){
+          if(prevSec <= curSec) return (prevSec < targetSec && targetSec <= curSec);
+          // 跨越区间（如接近 86400->0）
+          return (prevSec < targetSec && targetSec < 86400) || (0 <= targetSec && targetSec <= curSec);
+        }
+        if(passed(prev, cur, target)){
+          // 触发
+          alert('游戏时间闹钟：'+a.time + (a.label? '\n' + a.label : ''));
+          beep();
+          // 如果希望单次触发可注释下一行（目前保持启用状态，可手动关闭）
+          // a.enabled = false; saveAlarms();
+        }
+      });
+
+      lastGameSec = gs;
+    }
+
+    // 初始化
+    renderAlarms();
+    // 先设置 lastGameSec 为当前，避免立即触发
+    lastGameSec = nowGameSeconds(new Date());
+    setInterval(tick, 250);
+    tick();
+
+    // 提示如何保存网页
+    // （不在页面中自动下载；用户可以另存为或复制代码）
+  </script>
+</body>
+</html>
